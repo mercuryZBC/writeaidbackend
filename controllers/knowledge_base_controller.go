@@ -12,13 +12,13 @@ import (
 // CreateKnowledgeBase 创建知识库
 func CreateKnowledgeBase(c *gin.Context) {
 	var contextData struct {
-		Id          uint   `json:"userid"`
+		Id          int64  `json:"userid"`
 		Name        string `json:"kb_name" binding:"required"`
 		Description string `json:"kb_description" binding:"required"`
 		IsPublic    bool   `json:"kb_is_public"`
 	}
 	if id, exists := c.Get("userid"); exists {
-		contextData.Id = id.(uint)
+		contextData.Id = id.(int64)
 	}
 
 	if err := c.ShouldBindJSON(&contextData); err != nil {
@@ -57,8 +57,9 @@ func GetKnowledgeBaseList(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
 		return
 	}
-	if kbList, err := kbDAO.GetKBListByOwnerId(userId.(uint)); err == nil {
+	if kbList, err := kbDAO.GetKBListByOwnerId(userId.(int64)); err == nil {
 		c.JSON(http.StatusOK, gin.H{"knowledge_bases": kbList})
+		log.Println(kbList)
 		return
 	} else {
 		log.Println(err)
@@ -70,11 +71,11 @@ func GetKnowledgeBaseList(c *gin.Context) {
 // GetKnowledgeBaseDetail 根据用户ID和知识库ID获取知识库详情
 func GetKnowledgeBaseDetail(c *gin.Context) {
 	var contextData struct {
-		Id   uint `json:"userid"`
-		KBId uint `json:"kb_id" binding:"required"`
+		Id   int64 `json:"userid"`
+		KBId int64 `json:"kb_id" binding:"required"`
 	}
 	if id, exists := c.Get("userid"); exists {
-		contextData.Id = id.(uint)
+		contextData.Id = id.(int64)
 	}
 	if err := c.ShouldBindJSON(&contextData); err != nil {
 		log.Println("结构绑定失败")
@@ -101,15 +102,15 @@ func GetKnowledgeBaseDetail(c *gin.Context) {
 // UpdateKnowledgeBase 更新知识库,可以更新的字段：Name,Description,IsPublic
 func UpdateKnowledgeBase(c *gin.Context) {
 	var contextData struct {
-		Id          uint      `json:"userid"`
-		KBId        uint      `json:"kb_id" binding:"required"`
+		Id          int64     `json:"userid"`
+		KBId        int64     `json:"kb_id" binding:"required"`
 		Name        string    `json:"kb_name" binding:"required"`
 		Description string    `json:"kb_description" binding:"required"`
 		IsPublic    bool      `json:"kb_is_public" binding:"required"`
 		updated_at  time.Time `json:"kb_updated_at"`
 	}
 	if id, exists := c.Get("userid"); exists {
-		contextData.Id = id.(uint)
+		contextData.Id = id.(int64)
 	}
 	if err := c.ShouldBindJSON(&contextData); err != nil {
 		log.Println("结构绑定失败")
@@ -146,11 +147,11 @@ func UpdateKnowledgeBase(c *gin.Context) {
 // DeleteKnowledgeBase 删除知识库
 func DeleteKnowledgeBase(c *gin.Context) {
 	var contextData struct {
-		Id   uint `json:"userid"`
-		KBId uint `json:"kb_id" binding:"required"`
+		Id   int64 `json:"userid"`
+		KBId int64 `json:"kb_id" binding:"required"`
 	}
 	if id, exists := c.Get("userid"); exists {
-		contextData.Id = id.(uint)
+		contextData.Id = id.(int64)
 	}
 	if err := c.ShouldBindJSON(&contextData); err != nil {
 		log.Println("结构绑定失败")

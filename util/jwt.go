@@ -20,13 +20,13 @@ const TokenExpireDuration = time.Hour * 2
 
 // 用于 JWT 的 Claims 结构体
 type Claims struct {
-	ID    uint   `json:"userid"`
+	ID    int64  `json:"userid"`
 	Email string `json:"email"`
 	jwt.StandardClaims
 }
 
 // 生成 JWT 的函数
-func GenerateJWT(id uint, email string) (string, error) {
+func GenerateJWT(id int64, email string) (string, error) {
 	claims := &Claims{
 		ID:    id,
 		Email: email,

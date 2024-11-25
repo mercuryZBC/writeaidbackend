@@ -4,6 +4,8 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"yuqueppbackend/controllers"
+	"yuqueppbackend/dao"
+	"yuqueppbackend/db"
 	"yuqueppbackend/util"
 )
 
@@ -16,6 +18,10 @@ func SetupRouter() *gin.Engine {
 		AllowHeaders:     []string{"Content-Type", "Authorization"},           // 允许的请求头
 		AllowCredentials: true,                                                // 是否允许携带凭证（如 Cookies）
 	}))
+
+	// 初始化 DAO 和 Controller
+	docDao := dao.NewDocDao(db.GetDB())
+	docController := controllers.NewDocumentController(docDao)
 
 	authGroup := r.Group("/api/auth")
 	{
@@ -44,6 +50,18 @@ func SetupRouter() *gin.Engine {
 		knowledgeGroup.POST("/getKnowledgeBaseDetail", controllers.GetKnowledgeBaseDetail)
 		knowledgeGroup.POST("/updateKnowledgeBase", controllers.UpdateKnowledgeBase)
 		knowledgeGroup.POST("/deleteKnowledgeBase", controllers.DeleteKnowledgeBase)
+	}
+
+	documentGroup := r.Group("/api/document")
+	documentGroup.Use(util.AuthMiddleware())
+	{
+		// 文档相关路由
+		r.POST("/documents", docController.CreateDocumentHandler)
+		r.GET("/documents/:id", docController.GetDocumentByIDHandler)
+		r.GET("/knowledge_bases/:kb_id/documents", docController.GetDocumentsByKnowledgeBaseIDHandler)
+		r.PUT("/documents/:id", docController.UpdateDocumentHandler)
+		r.DELETE("/documents/:id", docController.DeleteDocumentByIDHandler)
+		r.POST("/documents/:id/view", docController.IncrementViewCountHandler)
 	}
 
 	return r

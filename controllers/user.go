@@ -9,12 +9,12 @@ import (
 
 func GetUserInfo(c *gin.Context) {
 	var contextData struct {
-		Id    uint   `json:"userid"`
+		Id    int64  `json:"userid"`
 		Email string `json:"email"`
 	}
 	// 从上下文中获取数据
 	if userID, exists := c.Get("userid"); exists {
-		contextData.Id = userID.(uint) // 获取并赋值
+		contextData.Id = userID.(int64) // 获取并赋值
 	}
 
 	if email, exists := c.Get("email"); exists {

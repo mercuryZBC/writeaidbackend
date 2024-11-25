@@ -19,7 +19,7 @@ func (dao *KBDAO) CreateKB(kb models.KnowledgeBase) error {
 	return dao.DB.Create(&kb).Error
 }
 
-func (dao *KBDAO) GetKBListByOwnerId(ownerId uint) ([]models.KnowledgeBase, error) {
+func (dao *KBDAO) GetKBListByOwnerId(ownerId int64) ([]models.KnowledgeBase, error) {
 	var knowledgeBases []models.KnowledgeBase
 	if err := dao.DB.Where("owner_id", ownerId).Find(&knowledgeBases).Error; err != nil {
 		return nil, err
@@ -32,7 +32,7 @@ func (dao *KBDAO) DeleteKB(kb models.KnowledgeBase) error {
 }
 
 // FindKB 查找知识库，使用 ownerId 和 id 作为查询条件
-func (dao *KBDAO) FindKB(ownerId, id uint) (kb models.KnowledgeBase, err error) {
+func (dao *KBDAO) FindKB(ownerId, id int64) (kb models.KnowledgeBase, err error) {
 	// 查询知识库，使用 ownerId 和 id 作为条件
 	err = dao.DB.Where("owner_id = ? AND id = ?", ownerId, id).First(&kb).Error
 	if err != nil {
@@ -49,7 +49,7 @@ func (dao *KBDAO) FindKB(ownerId, id uint) (kb models.KnowledgeBase, err error) 
 }
 
 // UpdateKB 更新知识库信息，使用 ownerId 和 id 作为查询条件
-func (dao *KBDAO) UpdateKB(ownerId, id uint, updatedKB models.KnowledgeBase) (models.KnowledgeBase, error) {
+func (dao *KBDAO) UpdateKB(ownerId, id int64, updatedKB models.KnowledgeBase) (models.KnowledgeBase, error) {
 	var kb models.KnowledgeBase
 
 	// 查找指定 ownerId 和 id 的知识库

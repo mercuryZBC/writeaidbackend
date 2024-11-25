@@ -39,7 +39,7 @@ func (dao *UserDAO) CreateUser(user models.User) error {
 }
 
 // GetUserByID 根据用户 ID 获取用户
-func (dao *UserDAO) GetUserByID(id uint) (*models.User, error) {
+func (dao *UserDAO) GetUserByID(id int64) (*models.User, error) {
 	var user models.User
 	if err := dao.DB.First(&user, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -73,12 +73,12 @@ func (dao *UserDAO) UpdateLastLoginTime(user models.User) error {
 }
 
 // DeleteUserByID 根据 ID 删除用户
-func (dao *UserDAO) DeleteUserByID(id uint) error {
+func (dao *UserDAO) DeleteUserByID(id int64) error {
 	return dao.DB.Delete(&models.User{}, id).Error
 }
 
 // UpdateLastLogin 更新用户的最后登录时间
-func (dao *UserDAO) UpdateLastLogin(userID uint) error {
+func (dao *UserDAO) UpdateLastLogin(userID int64) error {
 	return dao.DB.Model(&models.User{}).Where("id = ?", userID).
 		Update("last_login_at", time.Now()).Error
 }
