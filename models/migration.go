@@ -17,7 +17,11 @@ type Migration struct {
 // 自动迁移数据库表结构并记录迁移信息
 func MigrateDB(db *gorm.DB) error {
 	// 自动迁移 User 和 Migration 模型
-	if err := db.AutoMigrate(&User{}, &Migration{}); err != nil {
+	if err := db.AutoMigrate(
+		&User{},
+		&Migration{},
+		&KnowledgeBase{},
+		&Document{}); err != nil {
 		return err
 	}
 

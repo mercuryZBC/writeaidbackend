@@ -34,7 +34,8 @@ func NewUserDAO() *UserDAO {
 func (dao *UserDAO) CreateUser(user models.User) error {
 	user.RegisteredAt = time.Now()
 	user.ExpiryAt = time.Now()
-	return dao.DB.Create(user).Error
+	user.LastLoginAt = time.Now()
+	return dao.DB.Create(&user).Error
 }
 
 // GetUserByID 根据用户 ID 获取用户
