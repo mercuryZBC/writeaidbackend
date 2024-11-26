@@ -56,12 +56,12 @@ func SetupRouter() *gin.Engine {
 	documentGroup.Use(util.AuthMiddleware())
 	{
 		// 文档相关路由
-		r.POST("/documents", docController.CreateDocumentHandler)
-		r.GET("/documents/:id", docController.GetDocumentByIDHandler)
-		r.GET("/knowledge_bases/:kb_id/documents", docController.GetDocumentsByKnowledgeBaseIDHandler)
-		r.PUT("/documents/:id", docController.UpdateDocumentHandler)
-		r.DELETE("/documents/:id", docController.DeleteDocumentByIDHandler)
-		r.POST("/documents/:id/view", docController.IncrementViewCountHandler)
+		documentGroup.POST("/createDocument", docController.CreateDocumentHandler)
+		documentGroup.GET("/documents/:id", docController.GetDocumentByIDHandler)
+		documentGroup.GET("/getDocumentListByKbId/:kb_id", docController.GetDocumentsByKnowledgeBaseIDHandler)
+		documentGroup.PUT("/documents/:id", docController.UpdateDocumentHandler)
+		documentGroup.DELETE("/documents/:id", docController.DeleteDocumentByIDHandler)
+		documentGroup.POST("/documents/:id/view", docController.IncrementViewCountHandler)
 	}
 
 	return r

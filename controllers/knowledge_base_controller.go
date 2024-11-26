@@ -4,6 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 	"yuqueppbackend/dao"
 	"yuqueppbackend/models"
@@ -40,7 +41,7 @@ func CreateKnowledgeBase(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"kb_id":          knowledgeBase.ID,
+		"kb_id":          strconv.FormatInt(contextData.Id, 10),
 		"kb_name":        knowledgeBase.Name,
 		"kb_description": knowledgeBase.Description,
 		"kb_is_public":   knowledgeBase.IsPublic,
@@ -58,8 +59,20 @@ func GetKnowledgeBaseList(c *gin.Context) {
 		return
 	}
 	if kbList, err := kbDAO.GetKBListByOwnerId(userId.(int64)); err == nil {
-		c.JSON(http.StatusOK, gin.H{"knowledge_bases": kbList})
-		log.Println(kbList)
+
+		var kbListData []map[string]interface{}
+		for _, kb := range kbList {
+			tmpMap := make(map[string]interface{})
+			tmpMap["kb_id"] = strconv.FormatInt(kb.ID, 10)
+			tmpMap["kb_name"] = kb.Name
+			tmpMap["kb_description"] = kb.Description
+			tmpMap["kb_is_public"] = kb.IsPublic
+			tmpMap["kb_created_at"] = kb.CreatedAt
+			tmpMap["kb_updated_at"] = kb.UpdatedAt
+			kbListData = append(kbListData, tmpMap)
+		}
+
+		c.JSON(http.StatusOK, gin.H{"knowledge_bases": kbListData})
 		return
 	} else {
 		log.Println(err)
@@ -147,8 +160,8 @@ func UpdateKnowledgeBase(c *gin.Context) {
 // DeleteKnowledgeBase 删除知识库
 func DeleteKnowledgeBase(c *gin.Context) {
 	var contextData struct {
-		Id   int64 `json:"userid"`
-		KBId int64 `json:"kb_id" binding:"required"`
+		Id   int64  `json:"userid"`
+		KBId string `json:"kb_id" binding:"required"`
 	}
 	if id, exists := c.Get("userid"); exists {
 		contextData.Id = id.(int64)
@@ -160,7 +173,14 @@ func DeleteKnowledgeBase(c *gin.Context) {
 	}
 	// 使用 KBDAO 查找知识库
 	kbDAO := dao.NewKBDAO()
-	knowledgeBase, err := kbDAO.FindKB(contextData.Id, contextData.KBId)
+	// 使用 strconv.ParseInt 将字符串转换为 int64
+	kbId64, err := strconv.ParseInt(contextData.KBId, 10, 64) // 10 是十进制，64 表示返回 int64 类型
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "系统错误"})
+		return
+	}
+	knowledgeBase, err := kbDAO.FindKB(contextData.Id, kbId64)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Knowledge base not found"})
 	}

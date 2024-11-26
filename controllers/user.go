@@ -4,6 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"log"
 	"net/http"
+	"strconv"
 	"yuqueppbackend/util"
 )
 
@@ -25,7 +26,7 @@ func GetUserInfo(c *gin.Context) {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "系统错误请稍后再试"})
 	}
-	c.JSON(http.StatusOK, gin.H{"id": user.ID, "email": user.Email, "nickname": user.Nickname})
+	c.JSON(http.StatusOK, gin.H{"id": strconv.FormatInt(user.ID, 10), "email": user.Email, "nickname": user.Nickname})
 }
 
 func Logout(c *gin.Context) {
