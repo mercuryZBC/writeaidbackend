@@ -47,7 +47,7 @@ func SetupRouter() *gin.Engine {
 	{
 		knowledgeGroup.POST("/createKnowledgeBase", controllers.CreateKnowledgeBase)
 		knowledgeGroup.GET("/getKnowledgeBaseList", controllers.GetKnowledgeBaseList)
-		knowledgeGroup.POST("/getKnowledgeBaseDetail", controllers.GetKnowledgeBaseDetail)
+		knowledgeGroup.GET("/:kb_id", controllers.GetKnowledgeBaseDetail)
 		knowledgeGroup.POST("/updateKnowledgeBase", controllers.UpdateKnowledgeBase)
 		knowledgeGroup.POST("/deleteKnowledgeBase", controllers.DeleteKnowledgeBase)
 	}
@@ -57,12 +57,11 @@ func SetupRouter() *gin.Engine {
 	{
 		// 文档相关路由
 		documentGroup.POST("/createDocument", docController.CreateDocumentHandler)
-		documentGroup.GET("/documents/:id", docController.GetDocumentByIDHandler)
+		documentGroup.GET("/getDocument/:doc_id", docController.GetDocumentByIDHandler)
 		documentGroup.GET("/getDocumentListByKbId/:kb_id", docController.GetDocumentsByKnowledgeBaseIDHandler)
-		documentGroup.PUT("/documents/:id", docController.UpdateDocumentHandler)
-		documentGroup.DELETE("/documents/:id", docController.DeleteDocumentByIDHandler)
-		documentGroup.POST("/documents/:id/view", docController.IncrementViewCountHandler)
+		documentGroup.PUT("/documents/:doc_id", docController.UpdateDocumentHandler)
+		documentGroup.DELETE("/deleteDocument/:doc_id", docController.DeleteDocumentByIDHandler)
+		documentGroup.POST("/documents/:doc_id/view", docController.IncrementViewCountHandler)
 	}
-
 	return r
 }

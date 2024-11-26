@@ -15,7 +15,7 @@ func CreateKnowledgeBase(c *gin.Context) {
 	var contextData struct {
 		Id          int64  `json:"userid"`
 		Name        string `json:"kb_name" binding:"required"`
-		Description string `json:"kb_description" binding:"required"`
+		Description string `json:"kb_description"`
 		IsPublic    bool   `json:"kb_is_public"`
 	}
 	if id, exists := c.Get("userid"); exists {
@@ -83,27 +83,25 @@ func GetKnowledgeBaseList(c *gin.Context) {
 
 // GetKnowledgeBaseDetail 根据用户ID和知识库ID获取知识库详情
 func GetKnowledgeBaseDetail(c *gin.Context) {
-	var contextData struct {
-		Id   int64 `json:"userid"`
-		KBId int64 `json:"kb_id" binding:"required"`
-	}
-	if id, exists := c.Get("userid"); exists {
-		contextData.Id = id.(int64)
-	}
-	if err := c.ShouldBindJSON(&contextData); err != nil {
-		log.Println("结构绑定失败")
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	kbId := c.Param("kb_id")
+	id, exists := c.Get("userid")
+	if !exists {
+		c.JSON(http.StatusNotFound, gin.H{"error": "系统错误请稍后再试"})
 		return
 	}
+	kbId64, _ := strconv.ParseInt(kbId, 10, 64)
+	userId64, _ := id.(int64)
+
 	// 使用 KBDAO 查找知识库
 	kbDAO := dao.NewKBDAO()
-	knowledgeBase, err := kbDAO.FindKB(contextData.Id, contextData.KBId)
+	knowledgeBase, err := kbDAO.FindKB(userId64, kbId64)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Knowledge base not found"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"kb_id":          knowledgeBase.ID,
+		"kb_id":          strconv.FormatInt(kbId64, 10),
+		"kb_owner_id":    strconv.FormatInt(knowledgeBase.OwnerID, 10),
 		"kb_name":        knowledgeBase.Name,
 		"kb_description": knowledgeBase.Description,
 		"kb_is_public":   knowledgeBase.IsPublic,

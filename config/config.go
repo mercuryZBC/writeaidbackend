@@ -18,6 +18,10 @@ func InitConfig() error {
 	return nil
 }
 
+func GetDocumentStoragePath() string {
+	return viper.GetString("document_store_path")
+}
+
 func GetServerPort() string {
 	return ":" + viper.GetString("server.port")
 }

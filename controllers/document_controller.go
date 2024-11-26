@@ -2,14 +2,34 @@ package controllers
 
 import (
 	"github.com/gin-gonic/gin"
+	"log"
 	"net/http"
+	"os"
 	"strconv"
+	"yuqueppbackend/config"
 	"yuqueppbackend/dao"
 	"yuqueppbackend/models"
 )
 
 type DocumentController struct {
 	docDao *dao.DocDao
+}
+
+func getDocumentContentById(docId string) (string, error) {
+	content, err := os.ReadFile(config.GetDocumentStoragePath() + "/" + docId + ".txt")
+	if err != nil {
+		log.Println(err)
+		return "", err
+	}
+	return string(content), nil
+}
+func deleteDocumentFile(docId string) error {
+	err := os.Remove(config.GetDocumentStoragePath() + "/" + docId + ".txt")
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	return nil
 }
 
 // NewDocumentController 创建新的 DocumentController
@@ -51,9 +71,27 @@ func (dc *DocumentController) CreateDocumentHandler(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create document"})
 		return
 	}
+	str_doc_id := strconv.FormatInt(doc.ID, 10)
+	doc_file, err := os.Create(config.GetDocumentStoragePath() + "/" + str_doc_id + ".txt")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "系统错误，请稍后再试"})
+		return
+	}
+	// 确保文件内容为空
+	err = doc_file.Truncate(0)
+	if _, err := doc_file.Write([]byte("# " + doc.Title)); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "系统错误，请稍后再试"})
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法清空文件内容"})
+		return
+	}
+	// 关闭文件
+	defer doc_file.Close()
 
 	c.JSON(http.StatusOK, gin.H{
-		"doc_id":      strconv.FormatInt(doc.ID, 10),
+		"doc_id":      str_doc_id,
 		"kb_id":       doc.KnowledgeBaseID,
 		"doc_title":   doc.Title,
 		"doc_content": doc.Content,
@@ -62,7 +100,7 @@ func (dc *DocumentController) CreateDocumentHandler(c *gin.Context) {
 
 // GetDocumentByIDHandler 获取文档详情
 func (dc *DocumentController) GetDocumentByIDHandler(c *gin.Context) {
-	idParam := c.Param("id")
+	idParam := c.Param("doc_id")
 	id, err := strconv.Atoi(idParam)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid document ID"})
@@ -78,13 +116,20 @@ func (dc *DocumentController) GetDocumentByIDHandler(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "当前文档不见了，快去新建吧"})
 		return
 	}
-
+	strDocId := strconv.FormatInt(doc.ID, 10)
+	strKbId := strconv.FormatInt(doc.KnowledgeBaseID, 10)
+	docContent, err := getDocumentContentById(strDocId)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "系统错误，请稍后再试"})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{
-		"doc_id":      doc.ID,
-		"kb_id":       doc.KnowledgeBaseID,
+		"doc_id":      strDocId,
+		"kb_id":       strKbId,
 		"doc_title":   doc.Title,
-		"doc_content": doc.Content,
+		"doc_content": docContent,
 	})
+	return
 }
 
 // GetDocumentsByKnowledgeBaseIDHandler 获取某知识库的所有文档
@@ -139,17 +184,16 @@ func (dc *DocumentController) UpdateDocumentHandler(c *gin.Context) {
 // DeleteDocumentByIDHandler 删除文档
 func (dc *DocumentController) DeleteDocumentByIDHandler(c *gin.Context) {
 	// 从请求参数获取文档ID
-	idParam := c.Param("id")
+	idParam := c.Param("doc_id")
 	id, err := strconv.Atoi(idParam)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid document ID"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "错误的文档ID"})
 		return
 	}
 
-	// 获取当前登录用户的ID（假设JWT认证中间件已经将用户信息存储在上下文中）
 	userID, exists := c.Get("userid") // 从上下文中获取当前用户的ID
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户没有权限"})
 		return
 	}
 
@@ -171,6 +215,7 @@ func (dc *DocumentController) DeleteDocumentByIDHandler(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete document"})
 		return
 	}
+	deleteDocumentFile(idParam)
 
 	c.JSON(http.StatusOK, gin.H{"message": "Document deleted successfully"})
 }
