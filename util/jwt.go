@@ -16,7 +16,7 @@ var (
 	jwtSecretKey = []byte("your_jwt_secret")
 )
 
-const TokenExpireDuration = time.Hour * 2
+const TokenExpireDuration = time.Hour * 24 * 7
 
 // 用于 JWT 的 Claims 结构体
 type Claims struct {

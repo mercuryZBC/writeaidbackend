@@ -59,9 +59,10 @@ func SetupRouter() *gin.Engine {
 		documentGroup.POST("/createDocument", docController.CreateDocumentHandler)
 		documentGroup.GET("/getDocument/:doc_id", docController.GetDocumentByIDHandler)
 		documentGroup.GET("/getDocumentListByKbId/:kb_id", docController.GetDocumentsByKnowledgeBaseIDHandler)
-		documentGroup.PUT("/documents/:doc_id", docController.UpdateDocumentHandler)
+		documentGroup.PUT("/updateDocument/:doc_id", docController.UpdateDocumentHandler)
 		documentGroup.DELETE("/deleteDocument/:doc_id", docController.DeleteDocumentByIDHandler)
 		documentGroup.POST("/documents/:doc_id/view", docController.IncrementViewCountHandler)
+		documentGroup.GET("/recentViewDocument", docController.GetRecentViewDocumentsHandler)
 	}
 	return r
 }

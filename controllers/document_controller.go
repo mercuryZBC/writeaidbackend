@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"log"
 	"net/http"
@@ -13,6 +14,10 @@ import (
 
 type DocumentController struct {
 	docDao *dao.DocDao
+}
+
+func getDocumentStoragePath(docId string) string {
+	return config.GetDocumentStoragePath() + "/" + docId + ".txt"
 }
 
 func getDocumentContentById(docId string) (string, error) {
@@ -100,15 +105,17 @@ func (dc *DocumentController) CreateDocumentHandler(c *gin.Context) {
 
 // GetDocumentByIDHandler 获取文档详情
 func (dc *DocumentController) GetDocumentByIDHandler(c *gin.Context) {
-	idParam := c.Param("doc_id")
-	id, err := strconv.Atoi(idParam)
+	strDocId := c.Param("doc_id")
+	doc_id, err := strconv.Atoi(strDocId)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid document ID"})
+		log.Println(err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "系统错误请稍后重试"})
 		return
 	}
-
-	doc, err := dc.docDao.GetDocumentByID(int64(id))
+	// 判断用户请求文档是否存在
+	doc, err := dc.docDao.GetDocumentByID(int64(doc_id))
 	if err != nil {
+		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve document"})
 		return
 	}
@@ -116,13 +123,37 @@ func (dc *DocumentController) GetDocumentByIDHandler(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "当前文档不见了，快去新建吧"})
 		return
 	}
-	strDocId := strconv.FormatInt(doc.ID, 10)
+
+	userId, exists := c.Get("userid")
+	if !exists {
+		c.JSON(http.StatusNotFound, gin.H{"error": "系统错误，请稍后再试"})
+	}
+	strUserId := strconv.FormatInt(userId.(int64), 10)
 	strKbId := strconv.FormatInt(doc.KnowledgeBaseID, 10)
+
+	// 获取文档内容
 	docContent, err := getDocumentContentById(strDocId)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "系统错误，请稍后再试"})
 		return
 	}
+
+	// 获取知识库名称
+	kb, err := dao.NewKBDAO().FindKB(doc.OwnerId, doc.KnowledgeBaseID)
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve knowledge base"})
+		return
+	}
+	kbName := kb.Name
+
+	//将最近浏览记录写入到redis中
+	err = dc.docDao.UpdateRecentDocumentViewInRedis(*doc, kbName, strUserId)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "系统错误，请稍后再试"})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"doc_id":      strDocId,
 		"kb_id":       strKbId,
@@ -159,26 +190,22 @@ func (dc *DocumentController) GetDocumentsByKnowledgeBaseIDHandler(c *gin.Contex
 
 // UpdateDocumentHandler 更新文档
 func (dc *DocumentController) UpdateDocumentHandler(c *gin.Context) {
-	idParam := c.Param("id")
-	id, err := strconv.Atoi(idParam)
+	// 获取 doc_id 参数
+	docIdStr := c.Param("doc_id")
+	// 获取上传的文件
+	docFile, err := c.FormFile("file") // 注意字段名称是 'file'
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid document ID"})
+		c.JSON(http.StatusBadRequest, gin.H{"message": "系统错误，文件保存失败，请稍后再试"})
 		return
 	}
-
-	var doc models.Document
-	if err := c.ShouldBindJSON(&doc); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input data"})
+	// 保存文件到服务器
+	err = c.SaveUploadedFile(docFile, getDocumentStoragePath(docIdStr))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "系统错误，文件保存失败，请稍后再试"})
 		return
 	}
-
-	doc.ID = int64(id)
-	if err := dc.docDao.UpdateDocument(&doc); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update document"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"message": "Document updated successfully"})
+	// 返回成功响应
+	c.JSON(http.StatusOK, gin.H{"message": "文件更新成功"})
 }
 
 // DeleteDocumentByIDHandler 删除文档
@@ -237,53 +264,49 @@ func (dc *DocumentController) IncrementViewCountHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "View count incremented"})
 }
 
-func (dc *DocumentController) GetDocumentListByKbId(c *gin.Context) {
-	// 定义请求上下文结构
-	var contextData struct {
-		UserID int64  `json:"userid"`
-		KBId   string `json:"kb_id" binding:"required"`
+// GetRecentDocumentsHandler 获取最近浏览记录
+func (dc *DocumentController) GetRecentViewDocumentsHandler(c *gin.Context) {
+	// 默认获取最近 10 条记录，可以通过查询参数调整
+	startParam := c.DefaultQuery("start", "0")
+	limitParam := c.DefaultQuery("limit", "10")
+	start, err := strconv.Atoi(startParam)
+	if err != nil || start <= 0 {
+		start = 0
+	}
+	limit, err := strconv.Atoi(limitParam)
+	if err != nil || limit <= 0 {
+		limit = 10 // 设置默认值
 	}
 
 	// 获取用户 ID（从中间件中设置的上下文）
-	if id, exists := c.Get("userid"); exists {
-		contextData.UserID = id.(int64)
-	} else {
+	userId, exists := c.Get("userid")
+	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户未授权"})
 		return
 	}
+	strUserId := strconv.FormatInt(userId.(int64), 10)
 
-	// 绑定 JSON 请求参数
-	if err := c.ShouldBindJSON(&contextData); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的请求参数"})
-		return
-	}
-
-	// 解析 kb_id 参数
-	kbID, err := strconv.ParseInt(contextData.KBId, 10, 64)
+	// 从 Redis 中获取最近浏览记录
+	recentDocs, err := dc.docDao.GetRecentDocumentViewsWithScoresFromRedis(strUserId, int64(start), int64(limit-1))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的知识库 ID"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "系统错误，获取最近浏览文档失败"})
 		return
 	}
-
-	// 查询文档列表
-	var documents []models.Document
-	docList, err := dc.docDao.GetDocumentsByKnowledgeBaseID(kbID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "系统错误，获取文档失败"})
-		return
-	}
-	var docListData []map[string]interface{}
-	for _, doc := range docList {
-		tmpMap := make(map[string]interface{})
-		tmpMap["doc_id"] = strconv.FormatInt(doc.ID, 10)
-		tmpMap["doc_created_at"] = doc.CreatedAt
-		tmpMap["doc_updated_at"] = doc.UpdatedAt
-		docListData = append(docListData, tmpMap)
+	log.Print(recentDocs)
+	// 构造返回数据
+	var docList []map[string]interface{}
+	for _, doc := range recentDocs {
+		// 构造文档信息
+		docMap := map[string]interface{}{
+			"doc_id":    fmt.Sprintf("%.0f", doc["doc_id"].(float64)), // 文档 ID
+			"doc_title": doc["doc_title"],                             // 文档标题
+			"kb_id":     fmt.Sprintf("%.0f", doc["kb_id"].(float64)),  // 知识库 ID
+			"kb_name":   doc["kb_name"],                               // 知识库名称
+			"timestamp": doc["timestamp"],                             // 浏览时间（Unix 时间戳）
+		}
+		docList = append(docList, docMap)
 	}
 
-	c.JSON(http.StatusOK, gin.H{"doc_list": docListData})
-	// 返回查询结果
-	c.JSON(http.StatusOK, gin.H{
-		"documents": documents,
-	})
+	// 返回成功的响应
+	c.JSON(http.StatusOK, gin.H{"recent_docs": docList})
 }
