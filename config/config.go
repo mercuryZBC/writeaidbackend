@@ -33,3 +33,7 @@ func GetDatabaseConfig() map[string]interface{} {
 func GetRedisConfig() map[string]interface{} {
 	return viper.GetStringMap("redis")
 }
+
+func GetElasticSearchAddress() string {
+	return viper.GetString("elasticsearch.address")
+}

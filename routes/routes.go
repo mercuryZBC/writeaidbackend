@@ -13,7 +13,7 @@ func SetupRouter() *gin.Engine {
 	r := gin.Default()
 	// 设置 CORS 配置
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:3000"},                   // 允许的跨域来源（可以是 *，但不推荐用于生产环境）
+		AllowOrigins:     []string{"*"},                                       // 允许的跨域来源（可以是 *，但不推荐用于生产环境）
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}, // 允许的 HTTP 方法
 		AllowHeaders:     []string{"Content-Type", "Authorization"},           // 允许的请求头
 		AllowCredentials: true,                                                // 是否允许携带凭证（如 Cookies）

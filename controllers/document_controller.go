@@ -10,6 +10,7 @@ import (
 	"yuqueppbackend/config"
 	"yuqueppbackend/dao"
 	"yuqueppbackend/models"
+	"yuqueppbackend/util"
 )
 
 type DocumentController struct {
@@ -84,7 +85,8 @@ func (dc *DocumentController) CreateDocumentHandler(c *gin.Context) {
 	}
 	// 确保文件内容为空
 	err = doc_file.Truncate(0)
-	if _, err := doc_file.Write([]byte("# " + doc.Title)); err != nil {
+	doc_content := "# " + doc.Title
+	if _, err := doc_file.Write([]byte(doc_content)); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "系统错误，请稍后再试"})
 		return
 	}
@@ -92,6 +94,7 @@ func (dc *DocumentController) CreateDocumentHandler(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法清空文件内容"})
 		return
 	}
+	_ = util.InsertDocToES(doc, doc_content)
 	// 关闭文件
 	defer doc_file.Close()
 
@@ -192,6 +195,25 @@ func (dc *DocumentController) GetDocumentsByKnowledgeBaseIDHandler(c *gin.Contex
 func (dc *DocumentController) UpdateDocumentHandler(c *gin.Context) {
 	// 获取 doc_id 参数
 	docIdStr := c.Param("doc_id")
+	userId, _ := c.Get("userid")
+	docId, err := strconv.ParseInt(docIdStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "文档不存在或已经删除，请重试"})
+		return
+	}
+	doc, err := dc.docDao.GetDocumentByID(docId)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "系统错误，请稍候再试"})
+		return
+	}
+	if doc == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "系统错误，请稍候再试"})
+		return
+	}
+	if doc.OwnerId != userId {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "无修改权限，修改失败"})
+		return
+	}
 	// 获取上传的文件
 	docFile, err := c.FormFile("file") // 注意字段名称是 'file'
 	if err != nil {
@@ -204,6 +226,17 @@ func (dc *DocumentController) UpdateDocumentHandler(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "系统错误，文件保存失败，请稍后再试"})
 		return
 	}
+	content, err := os.ReadFile(getDocumentStoragePath(docIdStr))
+	if err != nil {
+		return
+	}
+	strContent := string(content)
+	err = util.UpdateDocToES(docId, doc.Title, strContent)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "系统错误，文件保存失败，请稍后再试"})
+		return
+	}
+
 	// 返回成功响应
 	c.JSON(http.StatusOK, gin.H{"message": "文件更新成功"})
 }
@@ -211,8 +244,8 @@ func (dc *DocumentController) UpdateDocumentHandler(c *gin.Context) {
 // DeleteDocumentByIDHandler 删除文档
 func (dc *DocumentController) DeleteDocumentByIDHandler(c *gin.Context) {
 	// 从请求参数获取文档ID
-	idParam := c.Param("doc_id")
-	id, err := strconv.Atoi(idParam)
+	docIdStr := c.Param("doc_id")
+	docId, err := strconv.ParseInt(docIdStr, 10, 64)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "错误的文档ID"})
 		return
@@ -225,7 +258,7 @@ func (dc *DocumentController) DeleteDocumentByIDHandler(c *gin.Context) {
 	}
 
 	// 查询文档的所有者
-	document, err := dc.docDao.GetDocumentByID(int64(id))
+	document, err := dc.docDao.GetDocumentByID(int64(docId))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve document"})
 		return
@@ -238,11 +271,16 @@ func (dc *DocumentController) DeleteDocumentByIDHandler(c *gin.Context) {
 	}
 
 	// 执行删除操作
-	if err := dc.docDao.DeleteDocumentByID(int64(id)); err != nil {
+	if err := dc.docDao.DeleteDocumentByID(int64(docId)); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete document"})
 		return
 	}
-	deleteDocumentFile(idParam)
+	deleteDocumentFile(docIdStr)
+
+	err = util.DeleteDocFromES(docId)
+	if err != nil {
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Document deleted successfully"})
 }

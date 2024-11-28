@@ -18,6 +18,7 @@ func main() {
 	// 初始化数据库单例对象
 	db.GetDB()
 	util.GetRedisClient()
+	util.InitElasticSearchClient()
 	r := routes.SetupRouter()
 	r.Run(config.GetServerPort())
 }
