@@ -63,6 +63,8 @@ func SetupRouter() *gin.Engine {
 		documentGroup.DELETE("/deleteDocument/:doc_id", docController.DeleteDocumentByIDHandler)
 		documentGroup.POST("/documents/:doc_id/view", docController.IncrementViewCountHandler)
 		documentGroup.GET("/recentViewDocument", docController.GetRecentViewDocumentsHandler)
+		documentGroup.GET("/recentEditDocument", docController.GetRecentEditDocumentsHandler)
+		documentGroup.GET("/recentCommentDocument", docController.GetRecentCommentDocumentsHandler)
 	}
 	return r
 }

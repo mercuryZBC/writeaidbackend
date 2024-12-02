@@ -1,8 +1,10 @@
 package config
 
 import (
+	"fmt"
 	"github.com/spf13/viper"
 	"log"
+	"os"
 )
 
 func InitConfig() error {
@@ -19,7 +21,14 @@ func InitConfig() error {
 }
 
 func GetDocumentStoragePath() string {
-	return viper.GetString("document_store_path")
+	path := viper.GetString("document_store_path")
+	err := os.MkdirAll(path, os.ModePerm)
+	if err != nil {
+		fmt.Println("Error creating directories:", err)
+	} else {
+		fmt.Println("Directories created successfully")
+	}
+	return path
 }
 
 func GetServerPort() string {

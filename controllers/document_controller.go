@@ -151,7 +151,7 @@ func (dc *DocumentController) GetDocumentByIDHandler(c *gin.Context) {
 	kbName := kb.Name
 
 	//将最近浏览记录写入到redis中
-	err = dc.docDao.UpdateRecentDocumentViewInRedis(*doc, kbName, strUserId)
+	err = dc.docDao.UpdateRecentDocumentInRedis(dao.View, *doc, kbName, strUserId)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "系统错误，请稍后再试"})
 		return
@@ -214,6 +214,15 @@ func (dc *DocumentController) UpdateDocumentHandler(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "无修改权限，修改失败"})
 		return
 	}
+
+	// 获取知识库名称
+	kb, err := dao.NewKBDAO().FindKB(doc.OwnerId, doc.KnowledgeBaseID)
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve knowledge base"})
+		return
+	}
+	kbName := kb.Name
 	// 获取上传的文件
 	docFile, err := c.FormFile("file") // 注意字段名称是 'file'
 	if err != nil {
@@ -236,7 +245,11 @@ func (dc *DocumentController) UpdateDocumentHandler(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "系统错误，文件保存失败，请稍后再试"})
 		return
 	}
-
+	err = dc.docDao.UpdateRecentDocumentInRedis(dao.Edit, *doc, kbName, strconv.FormatInt(userId.(int64), 10))
+	if err != nil {
+		log.Println("插入最近编辑记录到redis中失败")
+		return
+	}
 	// 返回成功响应
 	c.JSON(http.StatusOK, gin.H{"message": "文件更新成功"})
 }
@@ -325,7 +338,7 @@ func (dc *DocumentController) GetRecentViewDocumentsHandler(c *gin.Context) {
 	strUserId := strconv.FormatInt(userId.(int64), 10)
 
 	// 从 Redis 中获取最近浏览记录
-	recentDocs, err := dc.docDao.GetRecentDocumentViewsWithScoresFromRedis(strUserId, int64(start), int64(limit-1))
+	recentDocs, err := dc.docDao.GetRecentDocumentWithScoresFromRedis(dao.View, strUserId, int64(start), int64(limit-1))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "系统错误，获取最近浏览文档失败"})
 		return
@@ -336,11 +349,104 @@ func (dc *DocumentController) GetRecentViewDocumentsHandler(c *gin.Context) {
 	for _, doc := range recentDocs {
 		// 构造文档信息
 		docMap := map[string]interface{}{
-			"doc_id":    fmt.Sprintf("%.0f", doc["doc_id"].(float64)), // 文档 ID
-			"doc_title": doc["doc_title"],                             // 文档标题
-			"kb_id":     fmt.Sprintf("%.0f", doc["kb_id"].(float64)),  // 知识库 ID
-			"kb_name":   doc["kb_name"],                               // 知识库名称
-			"timestamp": doc["timestamp"],                             // 浏览时间（Unix 时间戳）
+			"doc_id":    fmt.Sprintf("%d", doc["doc_id"].(int64)),  // 文档 ID
+			"doc_title": doc["doc_title"],                          // 文档标题
+			"kb_id":     fmt.Sprintf("%d", doc["kb_id"].(float64)), // 知识库 ID
+			"kb_name":   doc["kb_name"],                            // 知识库名称
+			"timestamp": doc["timestamp"],                          // 浏览时间（Unix 时间戳）
+		}
+		docList = append(docList, docMap)
+	}
+
+	// 返回成功的响应
+	c.JSON(http.StatusOK, gin.H{"recent_docs": docList})
+}
+
+func (dc *DocumentController) GetRecentEditDocumentsHandler(c *gin.Context) {
+	// 默认获取最近 10 条记录，可以通过查询参数调整
+	startParam := c.DefaultQuery("start", "0")
+	limitParam := c.DefaultQuery("limit", "10")
+	start, err := strconv.Atoi(startParam)
+	if err != nil || start <= 0 {
+		start = 0
+	}
+	limit, err := strconv.Atoi(limitParam)
+	if err != nil || limit <= 0 {
+		limit = 10 // 设置默认值
+	}
+
+	// 获取用户 ID（从中间件中设置的上下文）
+	userId, exists := c.Get("userid")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户未授权"})
+		return
+	}
+	strUserId := strconv.FormatInt(userId.(int64), 10)
+
+	// 从 Redis 中获取最近浏览记录
+	recentDocs, err := dc.docDao.GetRecentDocumentWithScoresFromRedis(dao.Edit, strUserId, int64(start), int64(limit-1))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "系统错误，获取最近编辑文档失败"})
+		return
+	}
+	log.Print(recentDocs)
+	// 构造返回数据
+	var docList []map[string]interface{}
+	for _, doc := range recentDocs {
+		// 构造文档信息
+		docMap := map[string]interface{}{
+			"doc_id":    fmt.Sprintf("%d", doc["doc_id"].(int64)),  // 文档 ID
+			"doc_title": doc["doc_title"],                          // 文档标题
+			"kb_id":     fmt.Sprintf("%d", doc["kb_id"].(float64)), // 知识库 ID
+			"kb_name":   doc["kb_name"],                            // 知识库名称
+			"timestamp": doc["timestamp"],                          // 浏览时间（Unix 时间戳）
+		}
+		docList = append(docList, docMap)
+	}
+
+	// 返回成功的响应
+	c.JSON(http.StatusOK, gin.H{"recent_docs": docList})
+}
+
+// GetRecentDocumentsHandler 获取最近浏览记录
+func (dc *DocumentController) GetRecentCommentDocumentsHandler(c *gin.Context) {
+	// 默认获取最近 10 条记录，可以通过查询参数调整
+	startParam := c.DefaultQuery("start", "0")
+	limitParam := c.DefaultQuery("limit", "10")
+	start, err := strconv.Atoi(startParam)
+	if err != nil || start <= 0 {
+		start = 0
+	}
+	limit, err := strconv.Atoi(limitParam)
+	if err != nil || limit <= 0 {
+		limit = 10 // 设置默认值
+	}
+
+	// 获取用户 ID（从中间件中设置的上下文）
+	userId, exists := c.Get("userid")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户未授权"})
+		return
+	}
+	strUserId := strconv.FormatInt(userId.(int64), 10)
+
+	// 从 Redis 中获取最近浏览记录
+	recentDocs, err := dc.docDao.GetRecentDocumentWithScoresFromRedis(dao.Comment, strUserId, int64(start), int64(limit-1))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "系统错误，获取最近评论文档失败"})
+		return
+	}
+	log.Print(recentDocs)
+	// 构造返回数据
+	var docList []map[string]interface{}
+	for _, doc := range recentDocs {
+		// 构造文档信息
+		docMap := map[string]interface{}{
+			"doc_id":    fmt.Sprintf("%d", doc["doc_id"].(int64)),  // 文档 ID
+			"doc_title": doc["doc_title"],                          // 文档标题
+			"kb_id":     fmt.Sprintf("%d", doc["kb_id"].(float64)), // 知识库 ID
+			"kb_name":   doc["kb_name"],                            // 知识库名称
+			"timestamp": doc["timestamp"],                          // 浏览时间（Unix 时间戳）
 		}
 		docList = append(docList, docMap)
 	}

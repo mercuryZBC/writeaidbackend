@@ -12,6 +12,14 @@ import (
 	"yuqueppbackend/util"
 )
 
+type RecentType int
+
+const (
+	View RecentType = iota
+	Edit
+	Comment
+)
+
 // DocDao 处理与 Document 表相关的数据库操作
 type DocDao struct {
 	db *gorm.DB
@@ -100,8 +108,17 @@ func (dao *DocDao) AddTag(id int64, tag string) error {
 //}
 
 // UpdateRecentDocumentViewInRedis 更新最近浏览记录到 Redis
-func (dao *DocDao) UpdateRecentDocumentViewInRedis(document models.Document, kbName, userId string) error {
-	key := "user_recent_docs:" + userId
+func (dao *DocDao) UpdateRecentDocumentInRedis(recentType RecentType, document models.Document, kbName, userId string) error {
+	var key string
+	if recentType == View {
+		key = "user_recent_view_docs:" + userId
+	}
+	if recentType == Edit {
+		key = "user_recent_edit_docs:" + userId
+	}
+	if recentType == Comment {
+		key = "user_recent_comment_docs:" + userId
+	}
 	timestamp := float64(time.Now().Unix())
 
 	// 构造 JSON 数据作为 Redis ZSet 的 Member
@@ -130,28 +147,55 @@ func (dao *DocDao) UpdateRecentDocumentViewInRedis(document models.Document, kbN
 }
 
 // GetRecentDocumentViewsWithScoresFromRedis 获取用户最近浏览的文档记录（带分数）
-func (dao *DocDao) GetRecentDocumentViewsWithScoresFromRedis(userId string, start, end int64) ([]map[string]interface{}, error) {
-	key := "user_recent_docs:" + userId
-
-	// 获取带分数的数据
-	values, err := util.GetRedisClient().ZRevRangeWithScores(context.Background(), key, start, end).Result()
-	if err != nil {
-		return nil, err
+func (dao *DocDao) GetRecentDocumentWithScoresFromRedis(recentType RecentType, userId string, start, end int64) ([]map[string]interface{}, error) {
+	var key string
+	if recentType == View {
+		key = "user_recent_view_docs:" + userId
 	}
-
+	if recentType == Edit {
+		key = "user_recent_edit_docs:" + userId
+	}
+	if recentType == Comment {
+		key = "user_recent_comment_docs:" + userId
+	}
 	// 解析数据
 	var recentDocuments []map[string]interface{}
-	for _, value := range values {
-		var document map[string]interface{}
-		if err := json.Unmarshal([]byte(value.Member.(string)), &document); err != nil {
-			// 如果解析失败，记录错误但继续处理其他记录
-			log.Printf("Failed to parse recent document entry: %v", err)
-			continue
+	var cur int64 = 0
+	for cur <= end-start {
+		// 获取带分数的数据
+		values, err := util.GetRedisClient().ZRevRangeWithScores(context.Background(), key, start+cur, start+cur).Result()
+		if len(values) == 0 || err != nil {
+			break
 		}
-		// 附加分数（时间戳）
-		document["timestamp"] = value.Score
-		recentDocuments = append(recentDocuments, document)
-	}
+		for _, value := range values {
+			var document map[string]interface{}
+			if err := json.Unmarshal([]byte(value.Member.(string)), &document); err != nil {
+				// 如果解析失败，记录错误但继续处理其他记录
+				log.Printf("Failed to parse recent document entry: %v", err)
+				continue
+			}
+			log.Println(document)
+			// 判断当前文档是否已经被删除
+			if docId, ok := document["doc_id"].(float64); ok {
+				document["doc_id"] = int64(docId)
+			}
+			docId, ok := document["doc_id"].(int64)
+			if ok == false {
+				log.Printf("Failed to parse recent document entry: %v", err)
+				continue
+			}
 
+			if res, err := dao.GetDocumentByID(docId); err != nil || res == nil {
+				_, err = util.GetRedisClient().ZRem(context.Background(), key, value.Member).Result()
+				log.Printf("the document %v maybe was removed", document["doc_title"])
+				continue
+			}
+
+			// 附加分数（时间戳）
+			document["timestamp"] = value.Score
+			recentDocuments = append(recentDocuments, document)
+			cur++
+		}
+	}
 	return recentDocuments, nil
 }
