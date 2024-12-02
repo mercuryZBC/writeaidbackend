@@ -22,6 +22,8 @@ func SetupRouter() *gin.Engine {
 	// 初始化 DAO 和 Controller
 	docDao := dao.NewDocDao(db.GetDB())
 	docController := controllers.NewDocumentController(docDao)
+	dcDao := dao.NewCommentDAO(db.GetDB())
+	dcController := controllers.NewCommentController(dcDao)
 
 	authGroup := r.Group("/api/auth")
 	{
@@ -66,5 +68,13 @@ func SetupRouter() *gin.Engine {
 		documentGroup.GET("/recentEditDocument", docController.GetRecentEditDocumentsHandler)
 		documentGroup.GET("/recentCommentDocument", docController.GetRecentCommentDocumentsHandler)
 	}
+	documentCommentGroup := r.Group("/api/comment")
+	documentCommentGroup.Use(util.AuthMiddleware())
+	{
+		documentCommentGroup.POST("/createDocumentComment", dcController.CreateDocumentComment)
+		documentCommentGroup.POST("/replyDocumentComment", dcController.ReplyDocumentComment)
+		documentCommentGroup.GET("/getDocumentRootComment/:doc_id", dcController.GetDocumentRootComment)
+	}
+
 	return r
 }

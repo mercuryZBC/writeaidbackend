@@ -21,7 +21,9 @@ func MigrateDB(db *gorm.DB) error {
 		&User{},
 		&Migration{},
 		&KnowledgeBase{},
-		&Document{}); err != nil {
+		&Document{},
+		&DocumentComment{},
+	); err != nil {
 		return err
 	}
 
