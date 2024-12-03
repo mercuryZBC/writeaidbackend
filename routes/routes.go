@@ -74,6 +74,7 @@ func SetupRouter() *gin.Engine {
 		documentCommentGroup.POST("/createDocumentComment", dcController.CreateDocumentComment)
 		documentCommentGroup.POST("/replyDocumentComment", dcController.ReplyDocumentComment)
 		documentCommentGroup.GET("/getDocumentRootComment/:doc_id", dcController.GetDocumentRootComment)
+		documentCommentGroup.GET("/getChildrenComment/:root_id", dcController.GetDocumentChildComment)
 	}
 
 	return r

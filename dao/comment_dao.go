@@ -6,6 +6,7 @@ import (
 	"errors"
 	"github.com/go-redis/redis/v8"
 	"gorm.io/gorm"
+	"log"
 	"strconv"
 	"yuqueppbackend/models"
 	"yuqueppbackend/util"
@@ -60,6 +61,27 @@ func (dao *CommentDAO) GetRootCommentsByDocumentID(documentID int64, page, pageS
 		return nil, 0, err
 	}
 	return comments, total, nil
+}
+
+// GetRootCommentsByDocumentID 获取某个顶级评论下的子评论（支持分页）
+func (dao *CommentDAO) GetChildrenCommentsByRootIdFromRedis(rootCommentId int64, page, pageSize int64) ([]map[string]interface{}, error) {
+	key := "rootComment:" + strconv.FormatInt(rootCommentId, 10)
+	var childrenComments []map[string]interface{}
+	values, err := util.GetRedisClient().ZRevRangeWithScores(context.Background(), key, page*pageSize, pageSize).Result()
+	if err != nil {
+		return nil, err
+	}
+	for _, value := range values {
+		var childrenComment map[string]interface{}
+		if err := json.Unmarshal([]byte(value.Member.(string)), &childrenComment); err != nil {
+			// 如果解析失败，记录错误但继续处理其他记录
+			log.Printf("Failed to parse recent document entry: %v", err)
+			continue
+		}
+		log.Println(childrenComment)
+		childrenComments = append(childrenComments, childrenComment)
+	}
+	return childrenComments, nil
 }
 
 // UpdateComment 更新评论
@@ -142,19 +164,22 @@ func (dao *CommentDAO) InsertCommentToRedis(dc models.DocumentComment) error {
 func (dao *CommentDAO) InsertReplyCommentToRedis(dc models.DocumentComment) error {
 	key := "rootComment:" + strconv.FormatInt(*(dc.RootID), 10)
 	parentComment, err := dao.GetCommentByID(*dc.ParentID)
+	curComment, err := dao.GetCommentByID(dc.ID)
 	if err != nil {
 		return err
 	}
 	member := map[string]interface{}{
 		"comment_id":                   dc.ID,
 		"user_id":                      dc.UserID,
-		"nickname":                     dc.User.Nickname,
+		"nickname":                     curComment.User.Nickname,
 		"doc_id":                       dc.DocumentID,
 		"parent_comment_user_id":       parentComment.UserID,
 		"parent_comment_user_nickname": parentComment.User.Nickname,
 		"comment_content":              dc.Content,
 		"comment_created_at":           dc.CreatedAt,
 		"comment_updated_at":           dc.UpdatedAt,
+		"comment_like_count":           dc.LikeCount,
+		"comment_dislike_count":        dc.DislikeCount,
 	}
 	memberJSON, err := json.Marshal(member)
 	if err != nil {

@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"log"
 	"net/http"
@@ -194,3 +195,35 @@ func (cc *CommentController) GetDocumentRootComment(c *gin.Context) {
 }
 
 // 根据顶级评论id获取子评论
+func (cc *CommentController) GetDocumentChildComment(c *gin.Context) {
+	rootIdStr := c.Param("root_id")
+	pageStr := c.DefaultQuery("page", "0")
+	pageSizeStr := c.DefaultQuery("page_size", "10")
+	rootId, err := strconv.ParseInt(rootIdStr, 10, 64)
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "评论回复获取失败，请稍后再试"})
+		return
+	}
+	page, err := strconv.Atoi(pageStr)
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "评论回复获取失败，请稍后再试"})
+		return
+	}
+	pageSize, err := strconv.Atoi(pageSizeStr)
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "评论回复获取失败，请稍后再试"})
+		return
+	}
+	var childrenComments []map[string]interface{}
+	childrenComments, err = cc.commentDao.GetChildrenCommentsByRootIdFromRedis(rootId, int64(page), int64(pageSize))
+	for _, childComment := range childrenComments {
+		childComment["comment_id"] = fmt.Sprintf("%.0f", childComment["comment_id"].(float64))
+		childComment["doc_id"] = fmt.Sprintf("%.0f", childComment["doc_id"].(float64))
+		childComment["parent_comment_user_id"] = fmt.Sprintf("%.0f", childComment["parent_comment_user_id"].(float64))
+		childComment["user_id"] = fmt.Sprintf("%.0f", childComment["user_id"].(float64))
+	}
+	c.JSON(http.StatusOK, gin.H{"children_comments": childrenComments})
+}
