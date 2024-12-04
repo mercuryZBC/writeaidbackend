@@ -1,5 +1,8 @@
 FROM golang:1.23-alpine
 
+# 设置 Go 模块代理
+ENV GOPROXY=https://goproxy.cn,direct
+
 # 设置工作目录
 WORKDIR /app
 
