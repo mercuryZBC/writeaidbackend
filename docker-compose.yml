@@ -1,52 +1,50 @@
-version: '3.8'
-
 services:
   app:
-    build: .  # 从当前目录构建 Dockerfile
+    build: .
     ports:
-      - "8000:8000"  # 将容器的8000端口映射到宿主机的8000端口
+      - "8000:8000"
     depends_on:
-      - db  # 表示该服务依赖于 db 服务
-      - redis  # 表示该服务依赖于 redis 服务
-      - es  # 添加对 Elasticsearch 服务的依赖
+      - db
+      - redis
+      - es
     environment:
-      - DB_USER=root  # 设置环境变量
+      - DB_USER=root
       - DB_PASSWORD=12345678
       - DB_NAME=yuquepp
-      - REDIS_HOST=redis  # app 通过 redis 服务名访问 redis
-      - ES_HOST=es  # app 通过 Elasticsearch 服务名访问 ES
+      - REDIS_HOST=redis
+      - ES_HOST=es
+      - TZ=Asia/Shanghai  # 设置中国时区
     volumes:
-      - ./data/app:/app/data  # 将宿主机的 ./data/app 目录挂载到容器中的 /app/data 目录
-    restart: always  # 如果容器停止，自动重启
+      - ./data/app:/app/data
+    restart: always
 
   db:
-    image: mysql:8.0 # 使用 MySQL 官方镜像
-    container_name: db  # 给容器指定名字
+    image: mysql:8.0
+    container_name: db
     environment:
-      MYSQL_ROOT_PASSWORD: 12345678  # root 用户的密码
-      MYSQL_USER: user  # 设置普通用户
+      MYSQL_ROOT_PASSWORD: 12345678
+      MYSQL_USER: user
       MYSQL_PASSWORD: 12345678
-      MYSQL_DATABASE: yuquepp  # 创建数据库
+      MYSQL_DATABASE: yuquepp
+      - TZ=Asia/Shanghai  # 设置中国时区
     volumes:
-      - db_data:/var/lib/mysql  # 持久化数据
-    restart: always  # 容器停止时自动重启
+      - db_data:/var/lib/mysql
+    restart: always
 
   redis:
-    image: redis:latest  # 使用最新版本的 Redis 镜像
-    container_name: redis  # 给 Redis 容器指定名字
-    restart: always  # 容器停止时自动重启
+    image: redis:latest
+    container_name: redis
+    environment:
+      - TZ=Asia/Shanghai  # 设置中国时区
+    restart: always
 
   es:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.4.3  # 使用 Elasticsearch 官方镜像
-    container_name: es  # 给 Elasticsearch 容器指定名字
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.4.3
+    container_name: es
     environment:
-      - discovery.type=single-node  # 设置为单节点模式
-      - ES_JAVA_OPTS=-Xmx512m -Xms512m  # 设置 JVM 堆内存大小
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xmx512m -Xms512m
+      - TZ=Asia/Shanghai  # 设置中国时区
     volumes:
-      - es_data:/usr/share/elasticsearch/data  # 持久化 Elasticsearch 数据
-    restart: always  # 容器停止时自动重启
-
-volumes:
-  db_data: {}
-  redis_data: {}
-  es_data: {}  # 定义 Elasticsearch 数据卷
+      - es_data:/usr/share/elasticsearch/data
+    restart: always
