@@ -173,6 +173,8 @@ func (dao *CommentDAO) InsertReplyCommentToRedis(dc models.DocumentComment) erro
 		"user_id":                      dc.UserID,
 		"nickname":                     curComment.User.Nickname,
 		"doc_id":                       dc.DocumentID,
+		"root_comment_id":              dc.RootID,
+		"parent_comment_id":            parentComment.ID,
 		"parent_comment_user_id":       parentComment.UserID,
 		"parent_comment_user_nickname": parentComment.User.Nickname,
 		"comment_content":              dc.Content,

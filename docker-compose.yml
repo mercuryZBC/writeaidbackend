@@ -13,29 +13,29 @@ services:
       - DB_NAME=yuquepp
       - REDIS_HOST=redis
       - ES_HOST=es
-      - TZ=Asia/Shanghai  # 设置中国时区
     volumes:
       - ./data/app:/app/data
+      - /etc/localtime:/etc/localtime:ro  # 挂载宿主机时区文件
     restart: always
 
   db:
     image: mysql:8.0
     container_name: db
     environment:
-      MYSQL_ROOT_PASSWORD: 12345678
-      MYSQL_USER: user
-      MYSQL_PASSWORD: 12345678
-      MYSQL_DATABASE: yuquepp
-      - TZ=Asia/Shanghai  # 设置中国时区
+      - MYSQL_ROOT_PASSWORD=12345678
+      - MYSQL_USER=user
+      - MYSQL_PASSWORD=12345678
+      - MYSQL_DATABASE=yuquepp
     volumes:
       - db_data:/var/lib/mysql
+      - /etc/localtime:/etc/localtime:ro
     restart: always
 
   redis:
     image: redis:latest
     container_name: redis
-    environment:
-      - TZ=Asia/Shanghai  # 设置中国时区
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
     restart: always
 
   es:
@@ -44,7 +44,11 @@ services:
     environment:
       - discovery.type=single-node
       - ES_JAVA_OPTS=-Xmx512m -Xms512m
-      - TZ=Asia/Shanghai  # 设置中国时区
     volumes:
       - es_data:/usr/share/elasticsearch/data
+      - /etc/localtime:/etc/localtime:ro
     restart: always
+
+volumes:
+  db_data: {}
+  es_data: {}
