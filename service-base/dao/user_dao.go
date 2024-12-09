@@ -4,8 +4,8 @@ import (
 	"errors"
 	"gorm.io/gorm"
 	"time"
-	"yuqueppbackend/db"
-	"yuqueppbackend/models"
+	"yuqueppbackend/service-base/db"
+	"yuqueppbackend/service-base/models"
 )
 
 type UserDAO struct {

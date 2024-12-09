@@ -21,6 +21,8 @@ services:
   db:
     image: mysql:8.0
     container_name: db
+    ports:
+      - "3306:3306"  # 映射 MySQL 的 3306 端口
     environment:
       - MYSQL_ROOT_PASSWORD=12345678
       - MYSQL_USER=user
@@ -34,6 +36,8 @@ services:
   redis:
     image: redis:latest
     container_name: redis
+    ports:
+      - "6379:6379"  # 映射 Redis 的 6379 端口
     volumes:
       - /etc/localtime:/etc/localtime:ro
     restart: always
@@ -41,9 +45,13 @@ services:
   es:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.4.3
     container_name: es
+    ports:
+      - "9200:9200"  # 映射 Elasticsearch 的 HTTP 端口
+      - "9300:9300"  # 映射 Elasticsearch 的集群通信端口
     environment:
       - discovery.type=single-node
       - ES_JAVA_OPTS=-Xmx512m -Xms512m
+      - xpack.security.enabled=false  # 关闭安全认证
       - xpack.security.http.ssl.enabled=false
     volumes:
       - es_data:/usr/share/elasticsearch/data

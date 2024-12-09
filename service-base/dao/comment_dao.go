@@ -8,8 +8,8 @@ import (
 	"gorm.io/gorm"
 	"log"
 	"strconv"
-	"yuqueppbackend/models"
-	"yuqueppbackend/util"
+	"yuqueppbackend/service-base/models"
+	"yuqueppbackend/service-base/util"
 )
 
 type CommentDAO struct {

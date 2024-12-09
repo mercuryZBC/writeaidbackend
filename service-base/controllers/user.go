@@ -5,7 +5,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
-	"yuqueppbackend/util"
+	"yuqueppbackend/service-base/util"
 )
 
 func GetUserInfo(c *gin.Context) {

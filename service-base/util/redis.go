@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"github.com/go-redis/redis/v8"
 	"sync"
-	"yuqueppbackend/config"
+	"yuqueppbackend/service-base/config"
 )
 
 var (

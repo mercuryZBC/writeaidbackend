@@ -4,9 +4,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"log"
 	"net/http"
-	"yuqueppbackend/dao"
-	"yuqueppbackend/models"
-	"yuqueppbackend/util"
+	"yuqueppbackend/service-base/dao"
+	"yuqueppbackend/service-base/models"
+	"yuqueppbackend/service-base/util"
 )
 
 var userDao = dao.NewUserDAO()

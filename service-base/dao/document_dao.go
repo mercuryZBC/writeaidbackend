@@ -1,15 +1,19 @@
 package dao
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"github.com/elastic/go-elasticsearch/v8"
 	"github.com/go-redis/redis/v8"
 	"gorm.io/gorm"
 	"log"
+	"strconv"
 	"time"
-	"yuqueppbackend/models"
-	"yuqueppbackend/util"
+	"yuqueppbackend/service-base/models"
+	"yuqueppbackend/service-base/util"
 )
 
 type RecentType int
@@ -22,12 +26,13 @@ const (
 
 // DocDao 处理与 Document 表相关的数据库操作
 type DocDao struct {
-	db *gorm.DB
+	db       *gorm.DB
+	esClient *elasticsearch.Client
 }
 
 // NewDocDao 创建一个新的 DocDao 实例
-func NewDocDao(db *gorm.DB) *DocDao {
-	return &DocDao{db: db}
+func NewDocDao(db *gorm.DB, esClient *elasticsearch.Client) *DocDao {
+	return &DocDao{db: db, esClient: esClient}
 }
 
 // CreateDocument 创建文档
@@ -40,7 +45,7 @@ func (dao *DocDao) CreateDocument(doc *models.Document) error {
 // GetDocumentByID 根据 ID 获取文档
 func (dao *DocDao) GetDocumentByID(id int64) (*models.Document, error) {
 	var doc models.Document
-	err := dao.db.Preload("KnowledgeBase").Preload("Children").First(&doc, id).Error
+	err := dao.db.Preload("KnowledgeBase").First(&doc, id).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
@@ -198,4 +203,105 @@ func (dao *DocDao) GetRecentDocumentWithScoresFromRedis(recentType RecentType, u
 		}
 	}
 	return recentDocuments, nil
+}
+
+func (dao *DocDao) SetDocumentContentHash(documentId int64, hashValue string) error {
+	res := util.GetRedisClient().Set(context.Background(), "documentContentHash:"+strconv.FormatInt(documentId, 10), hashValue, time.Hour*24*7)
+	return res.Err()
+}
+
+func (dao *DocDao) GetDocumentContentHashByDocumentId(documentId int64) (string, error) {
+	res := util.GetRedisClient().Get(context.Background(), "documentContentHash:"+strconv.FormatInt(documentId, 10))
+	return res.Result()
+}
+
+// 将文档数据插入到ES
+
+func (dao *DocDao) InsertDocToES(document models.Document, content string) error {
+	docIdStr := strconv.FormatInt(int64(document.ID), 10)
+	doc := map[string]interface{}{
+		"id":      docIdStr,
+		"title":   document.Title,
+		"content": content,
+	}
+
+	// 将文档转为json
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(doc); err != nil {
+		log.Fatalf("Error encoding document: %s", err)
+	}
+
+	// 索引文档
+	res, err := dao.esClient.Index(
+		"document",
+		&buf,
+		dao.esClient.Index.WithDocumentID(docIdStr), // 自定义 _id
+	)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	return nil
+}
+
+func (dao *DocDao) UpdateDocToES(documentID int64, title string, content string) error {
+	// 创建需要更新的字段数据
+	doc := map[string]interface{}{
+		"doc": map[string]interface{}{
+			"title":   title,
+			"content": content,
+		},
+	}
+
+	// 将更新数据转为 JSON
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(doc); err != nil {
+		log.Fatalf("Error encoding update data: %s", err)
+	}
+
+	// 执行更新操作
+	res, err := dao.esClient.Update(
+		"document",                        // 索引名称
+		strconv.FormatInt(documentID, 10), // 文档 ID（字符串）
+		&buf,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update document: %w", err)
+	}
+	defer res.Body.Close()
+
+	fmt.Println(res)
+	return nil
+}
+
+func (dao *DocDao) DeleteDocFromES(documentID int64) error {
+	// 执行删除操作
+	res, err := dao.esClient.Delete(
+		"document",                        // 索引名称
+		strconv.FormatInt(documentID, 10), // 文档 ID
+	)
+	if err != nil {
+		return fmt.Errorf("failed to delete document: %w", err)
+	}
+	defer res.Body.Close()
+
+	fmt.Println(res)
+	return nil
+}
+
+// FindKB 查找知识库，使用 ownerId 和 id 作为查询条件
+func (dao *DocDao) FindKB(ownerId, id int64) (kb models.KnowledgeBase, err error) {
+	// 查询知识库，使用 ownerId 和 id 作为条件
+	err = dao.db.Where("owner_id = ? AND id = ?", ownerId, id).First(&kb).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			// 如果没有找到记录，返回一个适当的错误
+			return kb, fmt.Errorf("knowledge base not found for ownerId: %d, id: %d", ownerId, id)
+		}
+		// 其他数据库查询错误
+		return kb, fmt.Errorf("failed to find knowledge base: %v", err)
+	}
+
+	// 返回查询到的知识库对象
+	return kb, nil
 }

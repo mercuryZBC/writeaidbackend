@@ -10,7 +10,7 @@ import (
 func InitConfig() error {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
-	viper.AddConfigPath("./config")
+	viper.AddConfigPath("./service-base/config")
 
 	// 读取配置文件
 	if err := viper.ReadInConfig(); err != nil {

@@ -6,8 +6,8 @@ import (
 	"gorm.io/gorm"
 	"log"
 	"sync"
-	"yuqueppbackend/config"
-	"yuqueppbackend/models"
+	"yuqueppbackend/service-base/config"
+	"yuqueppbackend/service-base/models"
 )
 
 var (

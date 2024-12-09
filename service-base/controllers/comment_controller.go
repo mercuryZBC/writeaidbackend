@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"strconv"
 	"time"
-	"yuqueppbackend/dao"
-	"yuqueppbackend/models"
+	"yuqueppbackend/service-base/dao"
+	"yuqueppbackend/service-base/models"
 )
 
 type CommentController struct {

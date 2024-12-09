@@ -3,10 +3,10 @@ package routes
 import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	"yuqueppbackend/controllers"
-	"yuqueppbackend/dao"
-	"yuqueppbackend/db"
-	"yuqueppbackend/util"
+	"yuqueppbackend/service-base/controllers"
+	"yuqueppbackend/service-base/dao"
+	"yuqueppbackend/service-base/db"
+	"yuqueppbackend/service-base/util"
 )
 
 func SetupRouter() *gin.Engine {
@@ -20,10 +20,14 @@ func SetupRouter() *gin.Engine {
 	}))
 
 	// 初始化 DAO 和 Controller
-	docDao := dao.NewDocDao(db.GetDB())
+	kbDao := dao.NewKBDAO(db.GetDB(), util.GetElasticSearchClient())
+	kbController := controllers.NewKnowledgeBaseController(kbDao)
+	docDao := dao.NewDocDao(db.GetDB(), util.GetElasticSearchClient())
 	docController := controllers.NewDocumentController(docDao)
 	dcDao := dao.NewCommentDAO(db.GetDB())
 	dcController := controllers.NewCommentController(dcDao)
+	scDao := dao.NewSearchDao(util.GetElasticSearchClient())
+	scController := controllers.NewSearchController(scDao)
 
 	authGroup := r.Group("/api/auth")
 	{
@@ -47,11 +51,11 @@ func SetupRouter() *gin.Engine {
 	knowledgeGroup := r.Group("/api/knowledge")
 	knowledgeGroup.Use(util.AuthMiddleware()) // 使用认知中间件
 	{
-		knowledgeGroup.POST("/createKnowledgeBase", controllers.CreateKnowledgeBase)
-		knowledgeGroup.GET("/getKnowledgeBaseList", controllers.GetKnowledgeBaseList)
-		knowledgeGroup.GET("/:kb_id", controllers.GetKnowledgeBaseDetail)
-		knowledgeGroup.POST("/updateKnowledgeBase", controllers.UpdateKnowledgeBase)
-		knowledgeGroup.POST("/deleteKnowledgeBase", controllers.DeleteKnowledgeBase)
+		knowledgeGroup.POST("/createKnowledgeBase", kbController.CreateKnowledgeBase)
+		knowledgeGroup.GET("/getKnowledgeBaseList", kbController.GetKnowledgeBaseList)
+		knowledgeGroup.GET("/:kb_id", kbController.GetKnowledgeBaseDetail)
+		knowledgeGroup.POST("/updateKnowledgeBase", kbController.UpdateKnowledgeBase)
+		knowledgeGroup.POST("/deleteKnowledgeBase", kbController.DeleteKnowledgeBase)
 	}
 
 	documentGroup := r.Group("/api/document")
@@ -67,6 +71,7 @@ func SetupRouter() *gin.Engine {
 		documentGroup.GET("/recentViewDocument", docController.GetRecentViewDocumentsHandler)
 		documentGroup.GET("/recentEditDocument", docController.GetRecentEditDocumentsHandler)
 		documentGroup.GET("/recentCommentDocument", docController.GetRecentCommentDocumentsHandler)
+		documentGroup.GET("/documentContentHash/:doc_id", docController.GetDocumenHashByIdHandler)
 	}
 	documentCommentGroup := r.Group("/api/comment")
 	documentCommentGroup.Use(util.AuthMiddleware())
@@ -75,6 +80,12 @@ func SetupRouter() *gin.Engine {
 		documentCommentGroup.POST("/replyDocumentComment", dcController.ReplyDocumentComment)
 		documentCommentGroup.GET("/getDocumentRootComment/:doc_id", dcController.GetDocumentRootComment)
 		documentCommentGroup.GET("/getChildrenComment/:root_id", dcController.GetDocumentChildComment)
+	}
+	searchGroup := r.Group("/api/search")
+	searchGroup.Use(util.AuthMiddleware())
+	{
+		searchGroup.GET("/personalKnowledgeSearch/:search_text", scController.PersonalSearchKnowledgeBaseHandler)
+		searchGroup.GET("/personalDocumentSearch/:search_text", scController.PersonalSearchDocumentTitleHandler)
 	}
 
 	return r

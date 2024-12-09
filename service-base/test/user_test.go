@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"yuqueppbackend/routes"
+	"yuqueppbackend/service-base/routes"
 )
 
 const prefix_url = "http://localhost:8080/api/user/"

@@ -6,12 +6,20 @@ import (
 	"net/http"
 	"strconv"
 	"time"
-	"yuqueppbackend/dao"
-	"yuqueppbackend/models"
+	"yuqueppbackend/service-base/dao"
+	"yuqueppbackend/service-base/models"
 )
 
+type KnowledgeBaseController struct {
+	kbDao *dao.KBDAO
+}
+
+func NewKnowledgeBaseController(dao *dao.KBDAO) *KnowledgeBaseController {
+	return &KnowledgeBaseController{kbDao: dao}
+}
+
 // CreateKnowledgeBase 创建知识库
-func CreateKnowledgeBase(c *gin.Context) {
+func (kc *KnowledgeBaseController) CreateKnowledgeBase(c *gin.Context) {
 	var contextData struct {
 		Id          int64  `json:"userid"`
 		Name        string `json:"kb_name" binding:"required"`
@@ -35,13 +43,17 @@ func CreateKnowledgeBase(c *gin.Context) {
 		OwnerID:     contextData.Id,
 	}
 	// 使用 KBDAO 来创建知识库
-	kbDAO := dao.NewKBDAO()
-	if err := kbDAO.CreateKB(knowledgeBase); err != nil {
+	if err := kc.kbDao.CreateKB(&knowledgeBase); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create knowledge base"})
 		return
 	}
+	err := kc.kbDao.InsertKBToEs(knowledgeBase)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "系统错误，请稍候再试"})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{
-		"kb_id":          strconv.FormatInt(contextData.Id, 10),
+		"kb_id":          strconv.FormatInt(knowledgeBase.ID, 10),
 		"kb_name":        knowledgeBase.Name,
 		"kb_description": knowledgeBase.Description,
 		"kb_is_public":   knowledgeBase.IsPublic,
@@ -51,14 +63,13 @@ func CreateKnowledgeBase(c *gin.Context) {
 }
 
 // 获取用户创建的所有知识库
-func GetKnowledgeBaseList(c *gin.Context) {
-	kbDAO := dao.NewKBDAO()
+func (kc *KnowledgeBaseController) GetKnowledgeBaseList(c *gin.Context) {
 	userId, exists := c.Get("userid")
 	if !exists {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
 		return
 	}
-	if kbList, err := kbDAO.GetKBListByOwnerId(userId.(int64)); err == nil {
+	if kbList, err := kc.kbDao.GetKBListByOwnerId(userId.(int64)); err == nil {
 
 		var kbListData []map[string]interface{}
 		for _, kb := range kbList {
@@ -82,7 +93,7 @@ func GetKnowledgeBaseList(c *gin.Context) {
 }
 
 // GetKnowledgeBaseDetail 根据用户ID和知识库ID获取知识库详情
-func GetKnowledgeBaseDetail(c *gin.Context) {
+func (kc *KnowledgeBaseController) GetKnowledgeBaseDetail(c *gin.Context) {
 	kbId := c.Param("kb_id")
 	id, exists := c.Get("userid")
 	if !exists {
@@ -93,8 +104,7 @@ func GetKnowledgeBaseDetail(c *gin.Context) {
 	userId64, _ := id.(int64)
 
 	// 使用 KBDAO 查找知识库
-	kbDAO := dao.NewKBDAO()
-	knowledgeBase, err := kbDAO.FindKB(userId64, kbId64)
+	knowledgeBase, err := kc.kbDao.FindKB(userId64, kbId64)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Knowledge base not found"})
 		return
@@ -111,7 +121,7 @@ func GetKnowledgeBaseDetail(c *gin.Context) {
 }
 
 // UpdateKnowledgeBase 更新知识库,可以更新的字段：Name,Description,IsPublic
-func UpdateKnowledgeBase(c *gin.Context) {
+func (kc *KnowledgeBaseController) UpdateKnowledgeBase(c *gin.Context) {
 	var contextData struct {
 		Id          int64     `json:"userid"`
 		KBId        int64     `json:"kb_id" binding:"required"`
@@ -137,9 +147,7 @@ func UpdateKnowledgeBase(c *gin.Context) {
 		return
 	}
 
-	// 使用 KBDAO 查找并更新知识库
-	kbDAO := dao.NewKBDAO()
-	knowledgeBase, err := kbDAO.UpdateKB(contextData.Id, contextData.KBId, updatedKB)
+	knowledgeBase, err := kc.kbDao.UpdateKB(contextData.Id, contextData.KBId, updatedKB)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update knowledge base"})
 		return
@@ -156,7 +164,7 @@ func UpdateKnowledgeBase(c *gin.Context) {
 }
 
 // DeleteKnowledgeBase 删除知识库
-func DeleteKnowledgeBase(c *gin.Context) {
+func (kc *KnowledgeBaseController) DeleteKnowledgeBase(c *gin.Context) {
 	var contextData struct {
 		Id   int64  `json:"userid"`
 		KBId string `json:"kb_id" binding:"required"`
@@ -169,8 +177,7 @@ func DeleteKnowledgeBase(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	// 使用 KBDAO 查找知识库
-	kbDAO := dao.NewKBDAO()
+
 	// 使用 strconv.ParseInt 将字符串转换为 int64
 	kbId64, err := strconv.ParseInt(contextData.KBId, 10, 64) // 10 是十进制，64 表示返回 int64 类型
 	if err != nil {
@@ -178,14 +185,20 @@ func DeleteKnowledgeBase(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "系统错误"})
 		return
 	}
-	knowledgeBase, err := kbDAO.FindKB(contextData.Id, kbId64)
+	knowledgeBase, err := kc.kbDao.FindKB(contextData.Id, kbId64)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Knowledge base not found"})
 	}
 	// 使用 KBDAO 删除知识库
-	if err := kbDAO.DeleteKB(knowledgeBase); err != nil {
+	if err := kc.kbDao.DeleteKB(knowledgeBase); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete knowledge base"})
 		return
 	}
+
+	if err := kc.kbDao.DeleteKBFromES(knowledgeBase.ID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete knowledge base"})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{})
 }

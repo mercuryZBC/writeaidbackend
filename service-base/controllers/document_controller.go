@@ -7,10 +7,10 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"yuqueppbackend/config"
-	"yuqueppbackend/dao"
-	"yuqueppbackend/models"
-	"yuqueppbackend/util"
+	"yuqueppbackend/service-base/config"
+	"yuqueppbackend/service-base/dao"
+	"yuqueppbackend/service-base/models"
+	"yuqueppbackend/service-base/util"
 )
 
 type DocumentController struct {
@@ -91,10 +91,22 @@ func (dc *DocumentController) CreateDocumentHandler(c *gin.Context) {
 		return
 	}
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法清空文件内容"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "系统错误，请稍后再试"})
 		return
 	}
-	_ = util.InsertDocToES(doc, doc_content)
+
+	_ = dc.docDao.InsertDocToES(doc, doc_content)
+
+	hashValue, err := util.HashDocumentContent(config.GetDocumentStoragePath() + "/" + str_doc_id + ".txt")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "系统错误，请稍后再试"})
+		return
+	}
+	err = dc.docDao.SetDocumentContentHash(doc.ID, hashValue)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "系统错误，请稍后再试"})
+		return
+	}
 	// 关闭文件
 	defer doc_file.Close()
 
@@ -109,14 +121,14 @@ func (dc *DocumentController) CreateDocumentHandler(c *gin.Context) {
 // GetDocumentByIDHandler 获取文档详情
 func (dc *DocumentController) GetDocumentByIDHandler(c *gin.Context) {
 	strDocId := c.Param("doc_id")
-	doc_id, err := strconv.Atoi(strDocId)
+	docId, err := strconv.Atoi(strDocId)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "系统错误请稍后重试"})
 		return
 	}
 	// 判断用户请求文档是否存在
-	doc, err := dc.docDao.GetDocumentByID(int64(doc_id))
+	doc, err := dc.docDao.GetDocumentByID(int64(docId))
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve document"})
@@ -142,7 +154,7 @@ func (dc *DocumentController) GetDocumentByIDHandler(c *gin.Context) {
 	}
 
 	// 获取知识库名称
-	kb, err := dao.NewKBDAO().FindKB(doc.OwnerId, doc.KnowledgeBaseID)
+	kb, err := dc.docDao.FindKB(doc.OwnerId, doc.KnowledgeBaseID)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve knowledge base"})
@@ -152,6 +164,17 @@ func (dc *DocumentController) GetDocumentByIDHandler(c *gin.Context) {
 
 	//将最近浏览记录写入到redis中
 	err = dc.docDao.UpdateRecentDocumentInRedis(dao.View, *doc, kbName, strUserId)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "系统错误，请稍后再试"})
+		return
+	}
+	// 在redis中写入文档内容哈希值
+	hashValue, err := util.HashDocumentContent(config.GetDocumentStoragePath() + "/" + strDocId + ".txt")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "系统错误，请稍后再试"})
+		return
+	}
+	err = dc.docDao.SetDocumentContentHash(doc.ID, hashValue)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "系统错误，请稍后再试"})
 		return
@@ -216,7 +239,7 @@ func (dc *DocumentController) UpdateDocumentHandler(c *gin.Context) {
 	}
 
 	// 获取知识库名称
-	kb, err := dao.NewKBDAO().FindKB(doc.OwnerId, doc.KnowledgeBaseID)
+	kb, err := dc.docDao.FindKB(doc.OwnerId, doc.KnowledgeBaseID)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve knowledge base"})
@@ -240,9 +263,20 @@ func (dc *DocumentController) UpdateDocumentHandler(c *gin.Context) {
 		return
 	}
 	strContent := string(content)
-	err = util.UpdateDocToES(docId, doc.Title, strContent)
+	err = dc.docDao.UpdateDocToES(docId, doc.Title, strContent)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "系统错误，文件保存失败，请稍后再试"})
+		return
+	}
+	// 在redis中写入文档内容哈希值
+	hashValue, err := util.HashDocumentContent(config.GetDocumentStoragePath() + "/" + docIdStr + ".txt")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "系统错误，请稍后再试"})
+		return
+	}
+	err = dc.docDao.SetDocumentContentHash(doc.ID, hashValue)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "系统错误，请稍后再试"})
 		return
 	}
 	err = dc.docDao.UpdateRecentDocumentInRedis(dao.Edit, *doc, kbName, strconv.FormatInt(userId.(int64), 10))
@@ -290,7 +324,7 @@ func (dc *DocumentController) DeleteDocumentByIDHandler(c *gin.Context) {
 	}
 	deleteDocumentFile(docIdStr)
 
-	err = util.DeleteDocFromES(docId)
+	err = dc.docDao.DeleteDocFromES(docId)
 	if err != nil {
 		return
 	}
@@ -453,4 +487,20 @@ func (dc *DocumentController) GetRecentCommentDocumentsHandler(c *gin.Context) {
 
 	// 返回成功的响应
 	c.JSON(http.StatusOK, gin.H{"recent_docs": docList})
+}
+
+func (dc *DocumentController) GetDocumenHashByIdHandler(c *gin.Context) {
+	// 从请求参数获取文档ID
+	docIdStr := c.Param("doc_id")
+	docId, err := strconv.ParseInt(docIdStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "错误的文档ID"})
+		return
+	}
+
+	hash, err := dc.docDao.GetDocumentContentHashByDocumentId(docId)
+	if err != nil {
+		hash = ""
+	}
+	c.JSON(http.StatusOK, gin.H{"doc_content_hash": hash})
 }
